@@ -11,7 +11,8 @@ const sliceModel = (
   const outputPath = `${appDir}/outputs/${input_file.split(".")[0]}.gcode`;
   const command = `CuraEngine slice -v -j ${printer_def} -o ${outputPath} -s infill_line_distance=0 -s print_statistics=true -l ${filePath}/${input_file}`;
 
-  let output;
+  const output = execSync(command + ' 2>&1', { encoding: "utf-8" });
+  
   try {
     output = execSync(command, { encoding: "utf-8" });
     console.log("Output was:\n", output);
