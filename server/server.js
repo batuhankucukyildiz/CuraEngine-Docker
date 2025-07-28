@@ -29,9 +29,26 @@ app.get("/", (req, res) => {
 });
 
 app.post("/slice", upload.single("uploaded_file"), (req, res) => {
-  console.log(req.file);
-  sliceModel(req.file.filename);
-  res.download(`${appDir}/outputs/${req.file.filename.split(".")[0]}.gcode`);
+  try {
+    console.log(req.file);
+
+    const result = sliceModel(req.file.filename);
+
+    const gcodeFileName = `${req.file.filename.split(".")[0]}.gcode`;
+
+    res.json({
+      message: "Slicing completed",
+      file: req.file.filename,
+      printTimeSeconds: result.printTimeSeconds,
+      filamentVolumeMM3: result.filamentVolumeMM3,
+      filamentWeightGrams: result.filamentWeightGrams,
+      gcodeDownloadUrl: `/download/${gcodeFileName}`
+    });
+
+  } catch (err) {
+    console.error("❌ Slicing failed:", err);
+    res.status(500).json({ error: "Slicing failed" });
+  }
 });
 
 app.listen(PORT, () => {
