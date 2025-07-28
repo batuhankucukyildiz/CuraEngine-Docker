@@ -5,7 +5,7 @@ const filePath = `${appDir}/uploads`;
 
 const sliceModel = (
   input_file,
-  printer_def = "printer-settings/ultimaker3.def.json",
+  printer_def = "printer-settings/fdmprinter.def.json",
   materialDensity = 1.24 // PLA yoğunluğu (g/cm³)
 ) => {
   const outputPath = `${appDir}/outputs/${input_file.split(".")[0]}.gcode`;
