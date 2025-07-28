@@ -6,15 +6,14 @@ const filePath = `${appDir}/uploads`;
 const sliceModel = (
   input_file,
   printer_def = "printer-settings/ultimaker3.def.json",
-  materialDensity = 1.24 // PLA için varsayılan yoğunluk (g/cm³)
+  materialDensity = 1.24 // PLA yoğunluğu (g/cm³)
 ) => {
   const outputPath = `${appDir}/outputs/${input_file.split(".")[0]}.gcode`;
   const command = `CuraEngine slice -v -j ${printer_def} -o ${outputPath} -s infill_line_distance=0 -s print_statistics=true -l ${filePath}/${input_file}`;
 
-  const output = execSync(command + ' 2>&1', { encoding: "utf-8" });
-  
+  let output;
   try {
-    output = execSync(command, { encoding: "utf-8" });
+    output = execSync(command + ' 2>&1', { encoding: "utf-8" });
     console.log("Output was:\n", output);
   } catch (err) {
     console.error("❌ CuraEngine error:", err.message);
@@ -29,7 +28,7 @@ const sliceModel = (
   const volumeMatch = output.match(/Filament \(mm\^3\):\s*(\d+(\.\d+)?)/);
   const filamentVolumeMM3 = volumeMatch ? parseFloat(volumeMatch[1]) : null;
 
-  // Gram hesabı: mm³ → cm³ → gram
+  // Gram hesabı
   let filamentWeightGrams = null;
   if (filamentVolumeMM3 !== null) {
     const volumeCM3 = filamentVolumeMM3 / 1000;
