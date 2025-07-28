@@ -1,4 +1,5 @@
-const { execSync } = require("child_process");
+const execSync = require("child_process").execSync;
+
 const { dirname } = require("path");
 const appDir = dirname(require.main.filename);
 const filePath = `${appDir}/uploads`;
@@ -7,35 +8,14 @@ const sliceModel = (
   input_file,
   printer_def = "printer-settings/ultimaker3.def.json"
 ) => {
+  console.log("hello");
   const outputPath = `${appDir}/outputs/${input_file.split(".")[0]}.gcode`;
-
-  const stdout = execSync(
-    `CuraEngine slice -v -j ${printer_def} -o ${outputPath} -s infill_line_distance=0 -l ${filePath}/${input_file}`,
+  const output = execSync(
+    `CuraEngine slice -v -j ${printer_def} -o ${outputPath}  -s infill_line_distance=0 -l ${filePath}/${input_file}`,
     { encoding: "utf-8" }
-  );
+  ); // the default is 'buffer'
 
-  // Loglar arasında şu tür satırlar olabilir:
-  // "Print time: 3600"
-  // "Filament: 12345.6 mm (34.2 g)"
-  // Bunları parse edelim:
-  const result = {
-    printTimeSeconds: null,
-    filamentLengthMM: null,
-    filamentWeightGrams: null,
-    gcodePath: outputPath,
-    rawOutput: stdout,
-  };
-
-  const timeMatch = stdout.match(/Print time: (\d+)/);
-  if (timeMatch) result.printTimeSeconds = parseInt(timeMatch[1]);
-
-  const filamentMatch = stdout.match(/Filament: ([\d.]+) mm \(([\d.]+) g\)/);
-  if (filamentMatch) {
-    result.filamentLengthMM = parseFloat(filamentMatch[1]);
-    result.filamentWeightGrams = parseFloat(filamentMatch[2]);
-  }
-
-  return result;
+  console.log("Output was:\n", output);
 };
 
 module.exports = { sliceModel };

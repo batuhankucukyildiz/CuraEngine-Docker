@@ -29,22 +29,10 @@ app.get("/", (req, res) => {
 });
 
 app.post("/slice", upload.single("uploaded_file"), (req, res) => {
-  try {
-    const result = sliceModel(req.file.filename);
-    res.json({
-      message: "Slicing completed",
-      file: req.file.filename,
-      printTime: result.printTimeSeconds,
-      filamentLength: result.filamentLengthMM,
-      filamentWeight: result.filamentWeightGrams,
-      gcodeDownloadUrl: `/download/${req.file.filename.split(".")[0]}.gcode`,
-    });
-  } catch (err) {
-    console.error("Slicing error:", err);
-    res.status(500).json({ error: "Slicing failed" });
-  }
+  console.log(req.file);
+  sliceModel(req.file.filename);
+  res.download(`${appDir}/outputs/${req.file.filename.split(".")[0]}.gcode`);
 });
-
 
 app.listen(PORT, () => {
   console.log(`server running on ${PORT}`);
