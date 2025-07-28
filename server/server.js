@@ -28,11 +28,28 @@ app.get("/", (req, res) => {
   res.send("hi");
 });
 
+app.use(express.json()); // JSON body için gerekli
+
 app.post("/slice", upload.single("uploaded_file"), (req, res) => {
   try {
     console.log(req.file);
 
+    const { costPerGram, costPerHour } = req.body;
+
+    if (!costPerGram || !costPerHour) {
+      return res.status(400).json({ error: "costPerGram and costPerHour are required in request body" });
+    }
+
     const result = sliceModel(req.file.filename);
+
+    const price = calculatePrice(
+      {
+        printTimeSeconds: result.printTimeSeconds,
+        filamentWeightGrams: result.filamentWeightGrams
+      },
+      parseFloat(costPerGram),
+      parseFloat(costPerHour)
+    );
 
     const gcodeFileName = `${req.file.filename.split(".")[0]}.gcode`;
 
@@ -42,6 +59,7 @@ app.post("/slice", upload.single("uploaded_file"), (req, res) => {
       printTimeSeconds: result.printTimeSeconds,
       filamentVolumeMM3: result.filamentVolumeMM3,
       filamentWeightGrams: result.filamentWeightGrams,
+      price,
       gcodeDownloadUrl: `/download/${gcodeFileName}`
     });
 
@@ -50,6 +68,22 @@ app.post("/slice", upload.single("uploaded_file"), (req, res) => {
     res.status(500).json({ error: "Slicing failed" });
   }
 });
+
+
+const calculatePrice = ({ printTimeSeconds, filamentWeightGrams }, costPerGram, costPerHour) => {
+  const timeInHours = printTimeSeconds / 3600;
+  const timeCost = timeInHours * costPerHour;
+  const materialCost = filamentWeightGrams * costPerGram;
+  const total = timeCost + materialCost;
+
+  return {
+    timeCost: parseFloat(timeCost.toFixed(2)),
+    materialCost: parseFloat(materialCost.toFixed(2)),
+    total: parseFloat(total.toFixed(2)),
+    currency: "EUR"
+  };
+};
+
 
 app.listen(PORT, () => {
   console.log(`server running on ${PORT}`);
