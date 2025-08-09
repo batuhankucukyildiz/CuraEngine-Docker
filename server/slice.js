@@ -182,7 +182,7 @@ const appDefaults = {
 
 const sliceModel = (
   input_file,
-  printer_def = "printer-settings/fdmprinter.def.json",
+  printer_def = "printer-settings/ultimaker3.def.json",
   materialDensity = appDefaults.materialDensity
 ) => {
   const outputPath = `${appDir}/outputs/${input_file.split(".")[0]}.gcode`;
