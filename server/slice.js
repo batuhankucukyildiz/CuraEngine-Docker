@@ -87,7 +87,7 @@ const e0Settings = {
   small_feature_speed_factor: 70,
   speed_infill: 45,
   speed_layer_0: 20,
-  speed_print: 40,
+  speed_print: 20,
   speed_topbottom: 35,
   speed_travel: 175,
   speed_wall: 35,
