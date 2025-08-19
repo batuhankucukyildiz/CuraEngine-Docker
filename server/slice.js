@@ -76,12 +76,45 @@ const baseE1 = {
 // ---------- GCODE HEADER PARSER (IMPROVED) ----------
 function parseHeaderBlock(gcodePath) {
   try {
+    console.log(`Attempting to read file: ${gcodePath}`); // DEBUG
+    
+    if (!fs.existsSync(gcodePath)) {
+      console.log("File does not exist!"); // DEBUG
+      return {};
+    }
+    
     const text = fs.readFileSync(gcodePath, "utf-8");
+    console.log(`File read successfully, length: ${text.length}`); // DEBUG
+    
+    // İlk birkaç satırı logla
+    const firstLines = text.split('\n').slice(0, 10);
+    console.log("First 10 lines:", firstLines); // DEBUG
+    
     const start = text.indexOf(";START_OF_HEADER");
     const end = text.indexOf(";END_OF_HEADER");
     
+    console.log(`Header positions - start: ${start}, end: ${end}`); // DEBUG
+    
     if (start === -1 || end === -1) {
-      console.log("Header not found in gcode file!"); // DEBUG
+      console.log("Header markers not found in file!"); // DEBUG
+      
+      // Fallback: Header olmadan direkt arama
+      console.log("Trying fallback parsing..."); // DEBUG
+      const volE0Match = text.match(/;EXTRUDER_TRAIN\.0\.MATERIAL\.VOLUME_USED:(\d+)/);
+      const volE1Match = text.match(/;EXTRUDER_TRAIN\.1\.MATERIAL\.VOLUME_USED:(\d+)/);
+      const printTimeMatch = text.match(/;PRINT\.TIME:(\d+)/);
+      
+      if (volE0Match || volE1Match || printTimeMatch) {
+        console.log("Fallback parsing successful!"); // DEBUG
+        return {
+          volumes: { 
+            e0: volE0Match ? parseFloat(volE0Match[1]) : undefined,
+            e1: volE1Match ? parseFloat(volE1Match[1]) : undefined 
+          },
+          printTimeSeconds: printTimeMatch ? parseFloat(printTimeMatch[1]) : undefined
+        };
+      }
+      
       return {};
     }
     
@@ -224,9 +257,38 @@ async function sliceModel({
     throw err;
   }
 
-  // ---- Header'dan oku ----
-  const hdr = parseHeaderBlock(outputPath);
-  console.log("Parsed header data:", JSON.stringify(hdr, null, 2)); // DEBUG
+  // ---- Header'dan oku (dosya yazımını bekle) ----
+  let hdr = {};
+  let retries = 0;
+  const maxRetries = 5;
+  
+  while (retries < maxRetries) {
+    try {
+      // Dosyanın varlığını kontrol et
+      if (fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        console.log(`File exists, size: ${stats.size} bytes`); // DEBUG
+        
+        // Dosya boyutu 0'dan büyükse parse et
+        if (stats.size > 0) {
+          hdr = parseHeaderBlock(outputPath);
+          if (hdr.volumes && (hdr.volumes.e0 || hdr.volumes.e1)) {
+            console.log("Header parsed successfully!"); // DEBUG
+            break;
+          }
+        }
+      }
+      
+      console.log(`Retry ${retries + 1}/${maxRetries} - waiting for file...`); // DEBUG
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle
+      retries++;
+    } catch (error) {
+      console.error(`Error on retry ${retries}:`, error);
+      retries++;
+    }
+  }
+  
+  console.log("Final parsed header data:", JSON.stringify(hdr, null, 2)); // DEBUG
 
   // Süre
   let printTimeSeconds = hdr.printTimeSeconds;
