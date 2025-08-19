@@ -86,92 +86,97 @@ function parseHeaderBlock(gcodePath) {
     const text = fs.readFileSync(gcodePath, "utf-8");
     console.log(`File read successfully, length: ${text.length}`); // DEBUG
     
-    // İlk birkaç satırı logla
-    const firstLines = text.split('\n').slice(0, 10);
-    console.log("First 10 lines:", firstLines); // DEBUG
+    // İlk VE son birkaç satırı logla
+    const lines = text.split('\n');
+    console.log("First 5 lines:", lines.slice(0, 5)); // DEBUG
+    console.log("Last 10 lines:", lines.slice(-10)); // DEBUG
     
-    const start = text.indexOf(";START_OF_HEADER");
-    const end = text.indexOf(";END_OF_HEADER");
+    // Header başta VE sonda ara
+    let start = text.indexOf(";START_OF_HEADER");
+    let end = text.indexOf(";END_OF_HEADER");
     
     console.log(`Header positions - start: ${start}, end: ${end}`); // DEBUG
     
+    // Eğer başta yoksa, sonda ara
     if (start === -1 || end === -1) {
-      console.log("Header markers not found in file!"); // DEBUG
+      console.log("Header not found at beginning, checking end of file..."); // DEBUG
       
-      // Fallback: Header olmadan direkt arama
-      console.log("Trying fallback parsing..."); // DEBUG
-      const volE0Match = text.match(/;EXTRUDER_TRAIN\.0\.MATERIAL\.VOLUME_USED:(\d+)/);
-      const volE1Match = text.match(/;EXTRUDER_TRAIN\.1\.MATERIAL\.VOLUME_USED:(\d+)/);
-      const printTimeMatch = text.match(/;PRINT\.TIME:(\d+)/);
+      // Son 50 satırda ara
+      const lastLines = lines.slice(-50).join('\n');
+      start = lastLines.indexOf(";START_OF_HEADER");
+      end = lastLines.indexOf(";END_OF_HEADER");
       
-      if (volE0Match || volE1Match || printTimeMatch) {
-        console.log("Fallback parsing successful!"); // DEBUG
-        return {
-          volumes: { 
-            e0: volE0Match ? parseFloat(volE0Match[1]) : undefined,
-            e1: volE1Match ? parseFloat(volE1Match[1]) : undefined 
-          },
-          printTimeSeconds: printTimeMatch ? parseFloat(printTimeMatch[1]) : undefined
-        };
+      if (start !== -1 && end !== -1) {
+        console.log("Header found at end of file!"); // DEBUG
+        const headerText = lastLines.slice(start, end);
+        return parseHeaderContent(headerText);
       }
       
-      return {};
+      // Fallback: Header olmadan direkt arama (tüm dosyada)
+      console.log("Trying fallback parsing on entire file..."); // DEBUG
+      return parseHeaderContent(text);
     }
     
+    // Normal header parsing (başta bulundu)
     const headerText = text.slice(start, end);
-    console.log("Header text length:", headerText.length); // DEBUG
+    console.log("Header found at beginning, length:", headerText.length); // DEBUG
+    return parseHeaderContent(headerText);
     
-    // Daha basit regex yaklaşımı
-    const getValue = (key) => {
-      const regex = new RegExp(`;${key.replace('.', '\\.')}:(\\d+(?:\\.\\d+)?)`, 'i');
-      const match = headerText.match(regex);
-      console.log(`Regex for ${key}: ${regex}, Match: ${match ? match[1] : 'null'}`); // DEBUG
-      return match ? parseFloat(match[1]) : undefined;
-    };
-
-    // Boyutlar
-    const minX = getValue("PRINT.SIZE.MIN.X");
-    const minY = getValue("PRINT.SIZE.MIN.Y");
-    const minZ = getValue("PRINT.SIZE.MIN.Z");
-    const maxX = getValue("PRINT.SIZE.MAX.X");
-    const maxY = getValue("PRINT.SIZE.MAX.Y");
-    const maxZ = getValue("PRINT.SIZE.MAX.Z");
-
-    // Süre
-    const printTimeS = getValue("PRINT.TIME");
-
-    // Extruder hacimleri 
-    const volE0 = getValue("EXTRUDER_TRAIN.0.MATERIAL.VOLUME_USED");
-    const volE1 = getValue("EXTRUDER_TRAIN.1.MATERIAL.VOLUME_USED");
-
-    // Nozzle çapı
-    const nozE0 = getValue("EXTRUDER_TRAIN.0.NOZZLE.DIAMETER");
-    const nozE1 = getValue("EXTRUDER_TRAIN.1.NOZZLE.DIAMETER");
-
-    console.log("Extracted values:", { volE0, volE1, printTimeS }); // DEBUG
-
-    return {
-      dims:
-        minX != null &&
-        maxX != null &&
-        minY != null &&
-        maxY != null &&
-        minZ != null &&
-        maxZ != null
-          ? {
-              xWidth: parseFloat((maxX - minX).toFixed(2)),
-              yDepth: parseFloat((maxY - minY).toFixed(2)),
-              zHeight: parseFloat((maxZ - minZ).toFixed(2)),
-            }
-          : undefined,
-      printTimeSeconds: printTimeS,
-      volumes: { e0: volE0, e1: volE1 },
-      nozzles: { e0: nozE0, e1: nozE1 },
-    };
   } catch (error) {
     console.error("Error parsing header:", error);
     return {};
   }
+}
+
+// Header içeriğini parse eden yardımcı fonksiyon
+function parseHeaderContent(headerText) {
+  const getValue = (key) => {
+    // Negatif sayıları da destekleyen regex
+    const regex = new RegExp(`;${key.replace('.', '\\.')}:(-?\\d+(?:\\.\\d+)?)`, 'i');
+    const match = headerText.match(regex);
+    console.log(`Regex for ${key}: Match = ${match ? match[1] : 'null'}`); // DEBUG
+    return match ? parseFloat(match[1]) : undefined;
+  };
+
+  // Boyutlar
+  const minX = getValue("PRINT.SIZE.MIN.X");
+  const minY = getValue("PRINT.SIZE.MIN.Y");
+  const minZ = getValue("PRINT.SIZE.MIN.Z");
+  const maxX = getValue("PRINT.SIZE.MAX.X");
+  const maxY = getValue("PRINT.SIZE.MAX.Y");
+  const maxZ = getValue("PRINT.SIZE.MAX.Z");
+
+  // Süre
+  const printTimeS = getValue("PRINT.TIME");
+
+  // Extruder hacimleri 
+  const volE0 = getValue("EXTRUDER_TRAIN.0.MATERIAL.VOLUME_USED");
+  const volE1 = getValue("EXTRUDER_TRAIN.1.MATERIAL.VOLUME_USED");
+
+  // Nozzle çapı
+  const nozE0 = getValue("EXTRUDER_TRAIN.0.NOZZLE.DIAMETER");
+  const nozE1 = getValue("EXTRUDER_TRAIN.1.NOZZLE.DIAMETER");
+
+  console.log("Extracted values:", { volE0, volE1, printTimeS, minX, maxX }); // DEBUG
+
+  return {
+    dims:
+      minX != null &&
+      maxX != null &&
+      minY != null &&
+      maxY != null &&
+      minZ != null &&
+      maxZ != null
+        ? {
+            xWidth: parseFloat((maxX - minX).toFixed(2)),
+            yDepth: parseFloat((maxY - minY).toFixed(2)),
+            zHeight: parseFloat((maxZ - minZ).toFixed(2)),
+          }
+        : undefined,
+    printTimeSeconds: printTimeS,
+    volumes: { e0: volE0, e1: volE1 },
+    nozzles: { e0: nozE0, e1: nozE1 },
+  };
 }
 
 // mm³ → m (filament uzunluğu) - DÜZELTİLDİ
@@ -230,6 +235,9 @@ async function sliceModel({
   };
 
   const outputPath = `${appDir}/outputs/${inputFilename.split(".")[0]}.gcode`;
+  console.log(`📁 App directory: ${appDir}`); // DEBUG
+  console.log(`📄 Output path: ${outputPath}`); // DEBUG
+  console.log(`📋 Input filename: ${inputFilename}`); // DEBUG
   const generalFlags = buildSettingsFlags(generalSettings);
   const e0Flags = buildSettingsFlags(e0Settings);
   const e1Flags = buildSettingsFlags(e1Settings);
