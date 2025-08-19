@@ -13,11 +13,31 @@ function buildSettingsFlags(obj) {
 
 // ---- Malzeme presetleri ----
 const MATERIALS = {
-  PLA:   { density_g_cm3: 1.24, e0: { temp: 200, temp0: 205, temp_layer0: 210 }, e1: { temp: 200, temp0: 205, temp_layer0: 210 } },
-  PETG:  { density_g_cm3: 1.27, e0: { temp: 235, temp0: 240, temp_layer0: 245 }, e1: { temp: 235, temp0: 240, temp_layer0: 245 } },
-  ABS:   { density_g_cm3: 1.04, e0: { temp: 240, temp0: 245, temp_layer0: 250 }, e1: { temp: 240, temp0: 245, temp_layer0: 250 } },
-  ASA:   { density_g_cm3: 1.07, e0: { temp: 245, temp0: 250, temp_layer0: 255 }, e1: { temp: 245, temp0: 250, temp_layer0: 255 } },
-  NYLON: { density_g_cm3: 1.15, e0: { temp: 250, temp0: 255, temp_layer0: 260 }, e1: { temp: 250, temp0: 255, temp_layer0: 260 } },
+  PLA: {
+    density_g_cm3: 1.24,
+    e0: { temp: 200, temp0: 205, temp_layer0: 210 },
+    e1: { temp: 200, temp0: 205, temp_layer0: 210 },
+  },
+  PETG: {
+    density_g_cm3: 1.27,
+    e0: { temp: 235, temp0: 240, temp_layer0: 245 },
+    e1: { temp: 235, temp0: 240, temp_layer0: 245 },
+  },
+  ABS: {
+    density_g_cm3: 1.04,
+    e0: { temp: 240, temp0: 245, temp_layer0: 250 },
+    e1: { temp: 240, temp0: 245, temp_layer0: 250 },
+  },
+  ASA: {
+    density_g_cm3: 1.07,
+    e0: { temp: 245, temp0: 250, temp_layer0: 255 },
+    e1: { temp: 245, temp0: 250, temp_layer0: 255 },
+  },
+  NYLON: {
+    density_g_cm3: 1.15,
+    e0: { temp: 250, temp0: 255, temp_layer0: 260 },
+    e1: { temp: 250, temp0: 255, temp_layer0: 260 },
+  },
 };
 
 // ---- Genel/Extruder ayarları (kısaltıldı) ----
@@ -46,23 +66,29 @@ const baseE0 = {
   speed_travel: 175,
   wall_thickness: 0.8,
 };
-const baseE1 = { ...baseE0, acceleration_infill: 2000, acceleration_print: 2400, speed_print: 40 };
+const baseE1 = {
+  ...baseE0,
+  acceleration_infill: 2000,
+  acceleration_print: 2400,
+  speed_print: 40,
+};
 
 // ---------- GCODE HEADER PARSER ----------
 function parseHeaderBlock(gcodePath) {
   const text = fs.readFileSync(gcodePath, "utf-8");
   const start = text.indexOf(";START_OF_HEADER");
-  const end   = text.indexOf(";END_OF_HEADER");
+  const end = text.indexOf(";END_OF_HEADER");
   if (start === -1 || end === -1) return {};
   const header = text.slice(start, end).split(/\r?\n/);
 
   const getNum = (key) => {
-    const line = header.find(l => l.startsWith(`;${key}:`));
+    const line = header.find(l => l.includes(`;${key}:`));  // startsWith yerine includes
     if (!line) return undefined;
-    const raw = line.split(":").slice(1).join(":").trim();
-    const n = Number(raw);
+    const raw = line.split(":").slice(1).join(":").trim();   // trim ekle
+    const n = parseFloat(raw);
     return Number.isFinite(n) ? n : undefined;
   };
+  
 
   // Boyutlar
   const minX = getNum("PRINT.SIZE.MIN.X");
@@ -84,11 +110,19 @@ function parseHeaderBlock(gcodePath) {
   const nozE1 = getNum("EXTRUDER_TRAIN.1.NOZZLE.DIAMETER");
 
   return {
-    dims: (minX!=null&&maxX!=null&&minY!=null&&maxY!=null&&minZ!=null&&maxZ!=null) ? {
-      xWidth: parseFloat((maxX - minX).toFixed(2)),
-      yDepth: parseFloat((maxY - minY).toFixed(2)),
-      zHeight: parseFloat((maxZ - minZ).toFixed(2)),
-    } : undefined,
+    dims:
+      minX != null &&
+      maxX != null &&
+      minY != null &&
+      maxY != null &&
+      minZ != null &&
+      maxZ != null
+        ? {
+            xWidth: parseFloat((maxX - minX).toFixed(2)),
+            yDepth: parseFloat((maxY - minY).toFixed(2)),
+            zHeight: parseFloat((maxZ - minZ).toFixed(2)),
+          }
+        : undefined,
     printTimeSeconds: printTimeS,
     volumes: { e0: volE0, e1: volE1 },
     nozzles: { e0: nozE0, e1: nozE1 },
@@ -117,9 +151,9 @@ async function sliceModel({
   material,
   materialE0,
   materialE1,
-  filamentDiameterMm,        // tüm extruderlar için tek çap
-  filamentDiameterE0Mm,      // opsiyonel E0 çapı
-  filamentDiameterE1Mm,      // opsiyonel E1 çapı
+  filamentDiameterMm, // tüm extruderlar için tek çap
+  filamentDiameterE0Mm, // opsiyonel E0 çapı
+  filamentDiameterE1Mm, // opsiyonel E1 çapı
 }) {
   // Malzeme presetleri
   const matE0Name = (materialE0 || material || "PLA").toUpperCase();
@@ -151,9 +185,11 @@ async function sliceModel({
     `-j "${printer_def}"`,
     `-o "${outputPath}"`,
     generalFlags,
-    "-e0", e0Flags,
+    "-e0",
+    e0Flags,
     "--next",
-    "-e1", e1Flags,
+    "-e1",
+    e1Flags,
     "-s print_statistics=true",
     `-l "${path.join(filePath, inputFilename)}"`,
   ].join(" ");
@@ -180,7 +216,8 @@ async function sliceModel({
   // Extruder hacimleri
   const volE0 = hdr.volumes?.e0;
   const volE1 = hdr.volumes?.e1;
-  const filamentVolumeMM3 = (Number(volE0 || 0) + Number(volE1 || 0)) || undefined;
+  const filamentVolumeMM3 =
+    Number(volE0 || 0) + Number(volE1 || 0) || undefined;
 
   // Çaplar (öncelik: extruder spesifik > genel > 2.85)
   const dE0 = Number(filamentDiameterE0Mm || filamentDiameterMm) || 2.85;
@@ -207,13 +244,17 @@ async function sliceModel({
     command,
     outputPath,
     printTimeSeconds,
-    printTimeHours: Number.isFinite(printTimeSeconds) ? parseFloat((printTimeSeconds / 3600).toFixed(2)) : undefined,
+    printTimeHours: Number.isFinite(printTimeSeconds)
+      ? parseFloat((printTimeSeconds / 3600).toFixed(2))
+      : undefined,
 
     // Toplamlar
     filamentVolumeMM3,
     filamentLengthMeters,
     filamentWeightGrams,
-    filamentWeightKg: Number.isFinite(filamentWeightGrams) ? parseFloat((filamentWeightGrams / 1000).toFixed(3)) : undefined,
+    filamentWeightKg: Number.isFinite(filamentWeightGrams)
+      ? parseFloat((filamentWeightGrams / 1000).toFixed(3))
+      : undefined,
 
     // Extruder kırılımı
     perExtruder: {
