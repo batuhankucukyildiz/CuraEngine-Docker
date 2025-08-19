@@ -73,7 +73,30 @@ const baseE1 = {
   speed_print: 40,
 };
 
-// ---------- GCODE HEADER PARSER (IMPROVED) ----------
+// ---------- STDOUT HEADER PARSER ----------
+function parseStdoutHeader(stdout) {
+  try {
+    console.log("Parsing stdout for header info..."); // DEBUG
+    
+    // Header başlangıç ve bitiş noktalarını bul
+    const start = stdout.indexOf(";START_OF_HEADER");
+    const end = stdout.indexOf(";END_OF_HEADER");
+    
+    if (start === -1 || end === -1) {
+      console.log("Header markers not found in stdout!"); // DEBUG
+      return {};
+    }
+    
+    const headerText = stdout.slice(start, end + ";END_OF_HEADER".length);
+    console.log("Found header in stdout, length:", headerText.length); // DEBUG
+    
+    return parseHeaderContent(headerText);
+    
+  } catch (error) {
+    console.error("Error parsing stdout header:", error);
+    return {};
+  }
+}
 function parseHeaderBlock(gcodePath) {
   try {
     console.log(`Attempting to read file: ${gcodePath}`); // DEBUG
@@ -265,38 +288,9 @@ async function sliceModel({
     throw err;
   }
 
-  // ---- Header'dan oku (dosya yazımını bekle) ----
-  let hdr = {};
-  let retries = 0;
-  const maxRetries = 5;
-  
-  while (retries < maxRetries) {
-    try {
-      // Dosyanın varlığını kontrol et
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        console.log(`File exists, size: ${stats.size} bytes`); // DEBUG
-        
-        // Dosya boyutu 0'dan büyükse parse et
-        if (stats.size > 0) {
-          hdr = parseHeaderBlock(outputPath);
-          if (hdr.volumes && (hdr.volumes.e0 || hdr.volumes.e1)) {
-            console.log("Header parsed successfully!"); // DEBUG
-            break;
-          }
-        }
-      }
-      
-      console.log(`Retry ${retries + 1}/${maxRetries} - waiting for file...`); // DEBUG
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle
-      retries++;
-    } catch (error) {
-      console.error(`Error on retry ${retries}:`, error);
-      retries++;
-    }
-  }
-  
-  console.log("Final parsed header data:", JSON.stringify(hdr, null, 2)); // DEBUG
+  // ---- STDOUT'dan Header Parse Et ----
+  const hdr = parseStdoutHeader(output);
+  console.log("Parsed stdout header data:", JSON.stringify(hdr, null, 2)); // DEBUG
 
   // Süre
   let printTimeSeconds = hdr.printTimeSeconds;
@@ -310,7 +304,7 @@ async function sliceModel({
   const volE1 = hdr.volumes?.e1 || 0;
   const filamentVolumeMM3 = volE0 + volE1;
 
-  console.log(`Volume E0: ${volE0} mm³, Volume E1: ${volE1} mm³, Total: ${filamentVolumeMM3} mm³`); // DEBUG
+  console.log(`📊 Final values - E0: ${volE0} mm³, E1: ${volE1} mm³, Time: ${printTimeSeconds}s`); // DEBUG
 
   // Çaplar (öncelik sırası: spesifik > genel > varsayılan)
   const dE0 = filamentDiameterE0Mm || filamentDiameterMm;
