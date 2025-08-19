@@ -11,7 +11,7 @@ function buildSettingsFlags(obj) {
     .join(" ");
 }
 
-// ---- Malzeme presetleri (yoğunluk + tipik ısılar) ----
+// ---- Malzeme presetleri ----
 const MATERIALS = {
   PLA:   { density_g_cm3: 1.24, e0: { temp: 200, temp0: 205, temp_layer0: 210 }, e1: { temp: 200, temp0: 205, temp_layer0: 210 } },
   PETG:  { density_g_cm3: 1.27, e0: { temp: 235, temp0: 240, temp_layer0: 245 }, e1: { temp: 235, temp0: 240, temp_layer0: 245 } },
@@ -20,188 +20,120 @@ const MATERIALS = {
   NYLON: { density_g_cm3: 1.15, e0: { temp: 250, temp0: 255, temp_layer0: 260 }, e1: { temp: 250, temp0: 255, temp_layer0: 260 } },
 };
 
-// ---- Genel ayarlar (ihtiyacına göre korundu) ----
+// ---- Genel/Extruder ayarları (kısaltıldı) ----
 const generalSettings = {
   acceleration_enabled: true,
   adaptive_layer_height_enabled: true,
   adhesion_extruder_nr: 1,
   adhesion_type: "raft",
-  adhesion_z_offset: 0,
-  build_volume_temperature: 92,
-  interlocking_enable: false,
-  jerk_enabled: true,
   layer_height: 0.28,
   layer_height_0: 0.4,
-  material_shrinkage_percentage: 100.5,
-  prime_tower_base_curve_magnitude: 3,
-  prime_tower_base_height: 1.2,
-  prime_tower_base_size: 5,
   prime_tower_enable: true,
   prime_tower_position_x: 75,
   prime_tower_position_y: 95,
   prime_tower_size: 35,
-  raft_airgap: 0,
-  raft_base_line_spacing: 4,
-  raft_base_margin: 1.5,
-  raft_base_thickness: 0.7,
-  raft_flow: 86,
   raft_interface_layers: 3,
-  raft_interface_line_spacing: 1.4,
   raft_interface_thickness: 0.2,
 };
 
-// ---- Extruder profilleri (ısılar materyale göre override edilecek) ----
 const baseE0 = {
   acceleration_infill: 1500,
   acceleration_print: 2000,
-  infill_material_flow: 92,
-  infill_overlap: 10,
-  infill_pattern: "zigzag",
-  infill_sparse_density: 30,
-  initial_layer_line_width_factor: 110,
-  ironing_enabled: false,
-  ironing_flow: 12,
-  ironing_inset: 0.2,
-  ironing_line_spacing: 0.3,
-  ironing_monotonic: false,
-  ironing_only_highest_layer: false,
-  ironing_pattern: "concentric",
-  jerk_layer_0: 8,
-  jerk_print: 18,
   line_width: 0.45,
   material_flow: 96,
   material_flow_layer_0: 98,
-  // sıcaklıklar materyal preset'inden gelecek
-  optimize_wall_printing_order: true,
-  outer_inset_first: false,
-  raft_interface_line_width: 0.4,
-  retraction_amount: 0.6,
-  retraction_combing: "noskin",
-  retraction_count_max: 20,
-  retraction_enable: true,
-  retraction_extrusion_window: 2,
-  retraction_hop: 0.4,
-  retraction_hop_enabled: true,
-  retraction_min_travel: 0.8,
-  retraction_speed: 37,
-  skirt_brim_line_width: 0.45,
-  skirt_brim_minimal_length: 100,
-  skirt_brim_speed: 20,
-  skin_material_flow: 95,
-  skin_overlap: 8,
-  skin_preshrink: 0.12,
-  skin_removal_width: 0.2,
-  skin_speed: 25,
-  skirt_brim_line_count: 4,
-  small_feature_speed_factor_0: 70,
-  small_feature_speed_factor: 70,
-  speed_infill: 45,
-  speed_layer_0: 20,
   speed_print: 20,
-  speed_topbottom: 35,
   speed_travel: 175,
-  speed_wall: 35,
-  speed_wall_0: 28,
-  speed_wall_x: 35,
-  support_angle: 45,
-  support_brim_enable: false,
-  support_infill_rate: 12,
-  support_interface_enable: true,
-  support_interface_height: 0.6,
-  support_pattern: "zigzag",
-  top_layers: 4,
-  top_thickness: 0.8,
-  travel_avoid_supports: false,
-  wall_0_material_flow: 96,
-  wall_0_wipe_dist: 0.02,
-  wall_line_width: 0.45,
   wall_thickness: 0.8,
-  wall_x_material_flow_layer_0: 92.6,
 };
+const baseE1 = { ...baseE0, acceleration_infill: 2000, acceleration_print: 2400, speed_print: 40 };
 
-const baseE1 = {
-  ...baseE0,
-  acceleration_infill: 2000,
-  acceleration_print: 2400,
-  speed_print: 40,
-  support_interface_height: 1,
-};
+// ---------- GCODE HEADER PARSER ----------
+function parseHeaderBlock(gcodePath) {
+  const text = fs.readFileSync(gcodePath, "utf-8");
+  const start = text.indexOf(";START_OF_HEADER");
+  const end   = text.indexOf(";END_OF_HEADER");
+  if (start === -1 || end === -1) return {};
+  const header = text.slice(start, end).split(/\r?\n/);
 
-// ---- STL boyutlarını hesapla (ASCII/Binary destekli) ----
-function readSTLBoundingBox(absFilePath) {
-  const buf = fs.readFileSync(absFilePath);
-  const isASCII = buf.slice(0, 5).toString().toLowerCase() === "solid" && buf.toString().includes("facet");
+  const getNum = (key) => {
+    const line = header.find(l => l.startsWith(`;${key}:`));
+    if (!line) return undefined;
+    const raw = line.split(":").slice(1).join(":").trim();
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
 
-  const min = { x: +Infinity, y: +Infinity, z: +Infinity };
-  const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  // Boyutlar
+  const minX = getNum("PRINT.SIZE.MIN.X");
+  const minY = getNum("PRINT.SIZE.MIN.Y");
+  const minZ = getNum("PRINT.SIZE.MIN.Z");
+  const maxX = getNum("PRINT.SIZE.MAX.X");
+  const maxY = getNum("PRINT.SIZE.MAX.Y");
+  const maxZ = getNum("PRINT.SIZE.MAX.Z");
 
-  function consider(x, y, z) {
-    if (x < min.x) min.x = x; if (x > max.x) max.x = x;
-    if (y < min.y) min.y = y; if (y > max.y) max.y = y;
-    if (z < min.z) min.z = z; if (z > max.z) max.z = z;
-  }
+  // Süre (s)
+  const printTimeS = getNum("PRINT.TIME");
 
-  if (isASCII) {
-    // Her "vertex x y z" satırını yakala
-    const text = buf.toString();
-    const re = /vertex\s+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)/g;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      consider(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
-    }
-  } else {
-    // Binary STL: 80 bayt header, 4 bayt üçgen sayısı
-    const triCount = buf.readUInt32LE(80);
-    let offset = 84;
-    for (let i = 0; i < triCount; i++) {
-      offset += 12; // normal (3 float)
-      for (let v = 0; v < 3; v++) {
-        const x = buf.readFloatLE(offset); offset += 4;
-        const y = buf.readFloatLE(offset); offset += 4;
-        const z = buf.readFloatLE(offset); offset += 4;
-        consider(x, y, z);
-      }
-      offset += 2; // attribute byte count
-    }
-  }
+  // Extruder hacimleri (mm^3)
+  const volE0 = getNum("EXTRUDER_TRAIN.0.MATERIAL.VOLUME_USED");
+  const volE1 = getNum("EXTRUDER_TRAIN.1.MATERIAL.VOLUME_USED");
 
-  // mm cinsinden
-  const xWidth = parseFloat((max.x - min.x).toFixed(2));
-  const yDepth = parseFloat((max.y - min.y).toFixed(2));
-  const zHeight = parseFloat((max.z - min.z).toFixed(2));
+  // Nozzle çapı lazımsa:
+  const nozE0 = getNum("EXTRUDER_TRAIN.0.NOZZLE.DIAMETER");
+  const nozE1 = getNum("EXTRUDER_TRAIN.1.NOZZLE.DIAMETER");
 
-  return { xWidth, yDepth, zHeight };
+  return {
+    dims: (minX!=null&&maxX!=null&&minY!=null&&maxY!=null&&minZ!=null&&maxZ!=null) ? {
+      xWidth: parseFloat((maxX - minX).toFixed(2)),
+      yDepth: parseFloat((maxY - minY).toFixed(2)),
+      zHeight: parseFloat((maxZ - minZ).toFixed(2)),
+    } : undefined,
+    printTimeSeconds: printTimeS,
+    volumes: { e0: volE0, e1: volE1 },
+    nozzles: { e0: nozE0, e1: nozE1 },
+  };
+}
+
+// mm³ → m (filament uzunluğu)
+function volumeToLengthMeters(volume_mm3, diameter_mm) {
+  if (!Number.isFinite(volume_mm3)) return undefined;
+  const area = Math.PI * Math.pow(diameter_mm / 2, 2); // mm²
+  const length_mm = volume_mm3 / area;
+  return parseFloat((length_mm / 1000).toFixed(3));
+}
+
+// mm³ → g (yoğunluk g/cm³)
+function volumeToGrams(volume_mm3, density_g_cm3) {
+  if (!Number.isFinite(volume_mm3)) return undefined;
+  const cm3 = volume_mm3 / 1000;
+  return parseFloat((cm3 * density_g_cm3).toFixed(2));
 }
 
 // ---- Slicing ana fonksiyonu ----
 async function sliceModel({
   inputFilename,
   printer_def = "printer-settings/ultimaker3.def.json",
-  material,            // tek materyal adı (PLA/ABS/PETG/…)
-  materialE0,          // opsiyonel: E0 için materyal
-  materialE1,          // opsiyonel: E1 için materyal
-  filamentDiameterMm,  // default 2.85 veya 1.75
+  material,
+  materialE0,
+  materialE1,
+  filamentDiameterMm,        // tüm extruderlar için tek çap
+  filamentDiameterE0Mm,      // opsiyonel E0 çapı
+  filamentDiameterE1Mm,      // opsiyonel E1 çapı
 }) {
-  // Malzeme presetlerini hazırla
+  // Malzeme presetleri
   const matE0Name = (materialE0 || material || "PLA").toUpperCase();
   const matE1Name = (materialE1 || material || "PLA").toUpperCase();
   const matE0 = MATERIALS[matE0Name] || MATERIALS.PLA;
   const matE1 = MATERIALS[matE1Name] || MATERIALS.PLA;
 
-  // Yoğunluk: tek malzeme ise E0’ı baz al
-  const density_g_cm3 = matE0.density_g_cm3;
-
-  // Filament çapı (mm)
-  const d_mm = filamentDiameterMm ? parseFloat(filamentDiameterMm) : 2.85; // UM3 için 2.85 tipik
-
-  // E0/E1 sıcaklıklarını preset’lerden uygula
+  // Sıcaklıkları uygula
   const e0Settings = {
     ...baseE0,
     material_initial_print_temperature: matE0.e0.temp0,
     material_print_temperature: matE0.e0.temp,
     material_print_temperature_layer_0: matE0.e0.temp_layer0,
   };
-
   const e1Settings = {
     ...baseE1,
     material_initial_print_temperature: matE1.e1.temp0,
@@ -223,7 +155,7 @@ async function sliceModel({
     "--next",
     "-e1", e1Flags,
     "-s print_statistics=true",
-    `-l "${path.join(filePath, inputFilename)}"`
+    `-l "${path.join(filePath, inputFilename)}"`,
   ].join(" ");
 
   let output;
@@ -235,44 +167,73 @@ async function sliceModel({
     throw err;
   }
 
-  // ---- CuraEngine çıktısından istatistikler ----
-  const timeMatch = output.match(/Print time \(s\):\s*(\d+)/);
-  const printTimeSeconds = timeMatch ? parseInt(timeMatch[1], 10) : null;
+  // ---- Header’dan oku ----
+  const hdr = parseHeaderBlock(outputPath);
 
-  const volumeMatch = output.match(/Filament \(mm\^3\):\s*(\d+(\.\d+)?)/);
-  const filamentVolumeMM3 = volumeMatch ? parseFloat(volumeMatch[1]) : null;
-
-  // Filament uzunluğu (m): V / (π * (d/2)^2)
-  let filamentLengthMeters = null;
-  if (filamentVolumeMM3 !== null) {
-    const area_mm2 = Math.PI * Math.pow(d_mm / 2, 2);
-    const length_mm = filamentVolumeMM3 / area_mm2;
-    filamentLengthMeters = parseFloat((length_mm / 1000).toFixed(3));
+  // Süre (fallback: stdout satırı)
+  let printTimeSeconds = hdr.printTimeSeconds;
+  if (!Number.isFinite(printTimeSeconds)) {
+    const m = output.match(/Print time \(s\):\s*(\d+)/);
+    if (m) printTimeSeconds = parseInt(m[1], 10);
   }
 
-  // Kütle (g) = V(cm³) * yoğunluk(g/cm³)
-  let filamentWeightGrams = null;
-  if (filamentVolumeMM3 !== null) {
-    const volumeCM3 = filamentVolumeMM3 / 1000; // 1000 mm³ = 1 cm³
-    filamentWeightGrams = parseFloat((volumeCM3 * density_g_cm3).toFixed(2));
-  }
+  // Extruder hacimleri
+  const volE0 = hdr.volumes?.e0;
+  const volE1 = hdr.volumes?.e1;
+  const filamentVolumeMM3 = (Number(volE0 || 0) + Number(volE1 || 0)) || undefined;
 
-  // STL boyutları
-  let partDimensionsMm = null;
-  try {
-    const absModelPath = path.join(filePath, inputFilename);
-    partDimensionsMm = readSTLBoundingBox(absModelPath);
-  } catch (e) {
-    console.warn("⚠️ STL dimensions could not be computed:", e.message);
-  }
+  // Çaplar (öncelik: extruder spesifik > genel > 2.85)
+  const dE0 = Number(filamentDiameterE0Mm || filamentDiameterMm) || 2.85;
+  const dE1 = Number(filamentDiameterE1Mm || filamentDiameterMm) || 2.85;
+
+  // Uzunluklar (m)
+  const lenE0m = volumeToLengthMeters(volE0, dE0);
+  const lenE1m = volumeToLengthMeters(volE1, dE1);
+  const filamentLengthMeters = [lenE0m, lenE1m].some(Number.isFinite)
+    ? parseFloat(((lenE0m || 0) + (lenE1m || 0)).toFixed(3))
+    : undefined;
+
+  // Ağırlıklar (g)
+  const wE0g = volumeToGrams(volE0, matE0.density_g_cm3);
+  const wE1g = volumeToGrams(volE1, matE1.density_g_cm3);
+  const filamentWeightGrams = [wE0g, wE1g].some(Number.isFinite)
+    ? parseFloat(((wE0g || 0) + (wE1g || 0)).toFixed(2))
+    : undefined;
+
+  // Boyutlar
+  const partDimensionsMm = hdr.dims; // { xWidth, yDepth, zHeight }
 
   return {
     command,
     outputPath,
     printTimeSeconds,
+    printTimeHours: Number.isFinite(printTimeSeconds) ? parseFloat((printTimeSeconds / 3600).toFixed(2)) : undefined,
+
+    // Toplamlar
     filamentVolumeMM3,
     filamentLengthMeters,
     filamentWeightGrams,
+    filamentWeightKg: Number.isFinite(filamentWeightGrams) ? parseFloat((filamentWeightGrams / 1000).toFixed(3)) : undefined,
+
+    // Extruder kırılımı
+    perExtruder: {
+      E0: {
+        material: matE0Name,
+        volumeMM3: volE0,
+        filamentDiameterMm: dE0,
+        lengthMeters: lenE0m,
+        weightGrams: wE0g,
+      },
+      E1: {
+        material: matE1Name,
+        volumeMM3: volE1,
+        filamentDiameterMm: dE1,
+        lengthMeters: lenE1m,
+        weightGrams: wE1g,
+      },
+    },
+
+    // Boyutlar
     partDimensionsMm,
     materialUsed: { E0: matE0Name, E1: matE1Name },
   };
