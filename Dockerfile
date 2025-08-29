@@ -10,7 +10,6 @@ RUN apt update \
 
 # Add Directories
 
-
 ADD cura-engine/protobuf-3.6.1/ /cura/protobuf
 ADD cura-engine/libArcus-3.6.0/ /cura/libArcus
 ADD cura-engine/CuraEngine-3.6.0/ /cura/curaEngine
@@ -52,3 +51,7 @@ ADD /server /server
 RUN apt install -y nodejs
 ARG CACHE_DATE=2016-01-01
 RUN cd server && npm install
+
+# BU SATIRLARI EKLEYİN:
+WORKDIR /server
+CMD ["node", "server.js"]
